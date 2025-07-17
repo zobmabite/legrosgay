@@ -119,7 +119,18 @@
           div.innerHTML += `<div class="alert alert-primary">${msg.body.text}</div>`;
         } else if (msg.type === "Image") {
           const src = msg.body.mediaName;
-          div.innerHTML += `<img src="${src}" alt="Image">`;
+          const img = document.createElement("img");
+            img.src = src;
+            img.alt = msg.body.mediaName;
+            img.onerror = () => {
+              img.remove(); // enlève l'image cassée
+              const fallback = document.createElement("div");
+              fallback.className = "alert alert-warning mt-2";
+              fallback.textContent = `📷 Image introuvable : ${msg.body.mediaName}`;
+              div.appendChild(fallback);
+            };
+            div.appendChild(img);
+
         } else if (msg.type === "Audio") {
           const src = msg.body.mediaName;
           const durationText = msg.body.duration ? `Durée: ${formatDuration(msg.body.duration)}` : '';
