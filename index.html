@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Chat Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .sidebar {
+      overflow-y: auto;
+      border-right: 1px solid #ddd;
+    }
+    .chat-viewer {
+      padding: 20px;
+      overflow-y: auto;
+      max-height: calc(100vh - 150px);
+    }
+    .message {
+      margin-bottom: 15px;
+    }
+    .message .timestamp {
+      font-size: 0.8rem;
+      color: gray;
+    }
+    .message img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+    .conversation-item {
+      cursor: pointer;
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .conversation-item:hover {
+      background-color: #f1f1f1;
+    }
+    .active-conversation {
+      background-color: #e9ecef;
+      font-weight: bold;
+    }
+    audio {
+      width: 100%;
+      margin-top: 5px;
+    }
+
+    /* Mobile sticky header */
+    @media (max-width: 767.98px) {
+      .mobile-dropdown {
+        position: sticky;
+        top: 0;
+        z-index: 1030;
+        background: #fff;
+        padding: 10px;
+        border-bottom: 1px solid #ccc;
+      }
+      .mobile-dropdown .conversation-item {
+        padding: 5px 10px;
+      }
+      #conversation-dropdown {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid mt-3">
+    <div class="row flex-column flex-md-row">
+      <!-- Desktop sidebar -->
+      <div class="col-md-3 d-none d-md-block sidebar bg-white rounded-start">
+        <h5 class="p-3">Conversations</h5>
+        <div id="conversation-list"></div>
+      </div>
+
+      <!-- Mobile dropdown fixed -->
+      <div class="col-12 d-md-none mobile-dropdown">
+        <input type="text" id="search-conv" class="form-control mb-2" placeholder="🔍 Rechercher une conversation...">
+        <div id="conversation-dropdown"></div>
+      </div>
+
+      <!-- Chat display -->
+      <div class="col-md-9 col-12 chat-viewer bg-white rounded-end shadow" id="chat-log">
+        <p class="text-muted">Sélectionnez une conversation pour afficher les messages.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let dataCache = null;
+    let conversationElements = [];
+
+    function formatDuration(ms) {
+      const totalSec = Math.floor(ms / 1000);
+      const minutes = Math.floor(totalSec / 60).toString().padStart(2, '0');
+      const seconds = (totalSec % 60).toString().padStart(2, '0');
+      return `${minutes}:${seconds}`;
+    }
+
+    function renderConversation(index) {
+      const chatLog = document.getElementById("chat-log");
+      chatLog.innerHTML = "";
+
+      const conversation = dataCache.data.messages[index];
+      conversation.messages.forEach(msg => {
+        if (msg.retracted) return;
+
+        const div = document.createElement("div");
+        div.className = "message";
+        const time = new Date(msg.time).toLocaleString("fr-FR");
+        div.innerHTML = `<div class="timestamp">${time}</div>`;
+
+        if (msg.type === "Text") {
+          div.innerHTML += `<div class="alert alert-primary">${msg.body.text}</div>`;
+        } else if (msg.type === "Image") {
+          const src = msg.body.mediaName;
+          div.innerHTML += `<img src="${src}" alt="Image">`;
+        } else if (msg.type === "Audio") {
+          const src = msg.body.mediaName;
+          const durationText = msg.body.duration ? `Durée: ${formatDuration(msg.body.duration)}` : '';
+          div.innerHTML += `
+            <div class="alert alert-secondary">
+              ${durationText}
+              <audio controls>
+                <source src="${src}" type="audio/mpeg">
+                Votre navigateur ne supporte pas la lecture audio.
+              </audio>
+            </div>
+          `;
+        }
+
+        chatLog.appendChild(div);
+      });
+    }
+
+    function renderConversationLists() {
+      const desktopList = document.getElementById("conversation-list");
+      const dropdownList = document.getElementById("conversation-dropdown");
+      const searchInput = document.getElementById("search-conv");
+
+      desktopList.innerHTML = "";
+      dropdownList.innerHTML = "";
+      conversationElements = [];
+
+      dataCache.data.messages.forEach((conv, idx) => {
+        const title = `Conversation n-${dataCache.data.messages.length - idx}`;
+
+        // Desktop
+        const desktopItem = document.createElement("div");
+        desktopItem.className = "conversation-item";
+        desktopItem.textContent = title;
+        desktopItem.addEventListener("click", () => {
+          document.querySelectorAll('.conversation-item').forEach(el => el.classList.remove('active-conversation'));
+          desktopItem.classList.add('active-conversation');
+          renderConversation(idx);
+        });
+        desktopList.appendChild(desktopItem);
+
+        // Mobile
+        const mobileItem = document.createElement("div");
+        mobileItem.className = "conversation-item";
+        mobileItem.textContent = title;
+        mobileItem.addEventListener("click", () => {
+          document.querySelectorAll('.conversation-item').forEach(el => el.classList.remove('active-conversation'));
+          mobileItem.classList.add('active-conversation');
+          renderConversation(idx);
+        });
+        dropdownList.appendChild(mobileItem);
+
+        conversationElements.push({ title, element: mobileItem });
+      });
+
+      // Filtrage mobile
+      searchInput?.addEventListener("input", () => {
+        const query = searchInput.value.toLowerCase();
+        conversationElements.forEach(({ title, element }) => {
+          element.style.display = title.toLowerCase().includes(query) ? "block" : "none";
+        });
+      });
+    }
+
+    fetch('data_messages.json')
+      .then(response => {
+        if (!response.ok) throw new Error("Impossible de charger le JSON.");
+        return response.json();
+      })
+      .then(data => {
+        dataCache = data;
+        renderConversationLists();
+      })
+      .catch(err => {
+        document.getElementById("chat-log").innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+      });
+  </script>
+</body>
+</html>
